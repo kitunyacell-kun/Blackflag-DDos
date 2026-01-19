@@ -1,3 +1,4 @@
+import os
 import threading
 import random
 import sys
@@ -52,6 +53,15 @@ class ThreadGroupProxyManager:
              logger.info("Using direct connection mode.")
         else:
              pass
+
+os.system("clear")
+print("""
+\033[32m
+#
+#
+#
+\033[0m
+""")
 
     def _parse_proxy(self, proxy_str: str) -> Optional[ProxyTuple]:
         try:
